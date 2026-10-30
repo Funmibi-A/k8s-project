@@ -1,0 +1,17 @@
+NAME                                READY   STATUS    RESTARTS   AGE
+pod/hello-deploy-554f59df4f-9vw69   1/1     Running   0          7m41s
+pod/hello-deploy-554f59df4f-tq6zr   1/1     Running   0          7m39s
+pod/hello-deploy-554f59df4f-w5674   1/1     Running   0          7m38s
+
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+service/hello-svc    NodePort    10.96.155.225   <none>        80:30080/TCP   34m
+service/kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP        43m
+
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/hello-deploy   3/3     3            3           36m
+
+NAME                                      DESIRED   CURRENT   READY   AGE
+replicaset.apps/hello-deploy-554f59df4f   3         3         3       7m41s
+replicaset.apps/hello-deploy-5c7cf6fd48   0         0         0       2m18s
+replicaset.apps/hello-deploy-85b4597f54   0         0         0       36m
+replicaset.apps/hello-deploy-887f968f6    0         0         0       19m

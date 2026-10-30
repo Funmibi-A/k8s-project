@@ -1,0 +1,5 @@
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-deploy-554f59df4f-9vw69   1/1     Running   0          7m1s
+hello-deploy-554f59df4f-tq6zr   1/1     Running   0          6m59s
+hello-deploy-554f59df4f-w5674   1/1     Running   0          6m58s
+hello-deploy-5c7cf6fd48-d6xxh   0/1     Pending   0          98s

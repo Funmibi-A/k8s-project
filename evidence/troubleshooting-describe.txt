@@ -1,0 +1,56 @@
+funmibi@DESKTOP-V951QG9:~/k8s-project$ kubectl describe pod hello-deploy-887f968f6-j9jq9
+Name:             hello-deploy-887f968f6-j9jq9
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             minikube/192.168.49.2
+Start Time:       Fri, 30 Oct 2026 00:51:55 +0100
+Labels:           app=hello
+                  pod-template-hash=887f968f6
+Annotations:      <none>
+Status:           Pending
+IP:               10.244.0.11
+IPs:
+  IP:           10.244.0.11
+Controlled By:  ReplicaSet/hello-deploy-887f968f6
+Containers:
+  nginx:
+    Container ID:
+    Image:          nginx:1.99-typo
+    Image ID:
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Waiting
+      Reason:       ImagePullBackOff
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-q6lck (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  kube-api-access-q6lck:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                  From               Message
+  ----     ------     ----                 ----               -------
+  Normal   Scheduled  2m22s                default-scheduler  Successfully assigned default/hello-deploy-887f968f6-j9jq9 to minikube
+  Normal   BackOff    35s (x4 over 2m9s)   kubelet            spec.containers{nginx}: Back-off pulling image "nginx:1.99-typo"
+  Warning  Failed     35s (x4 over 2m9s)   kubelet            spec.containers{nginx}: Error: ImagePullBackOff
+  Normal   Pulling    20s (x4 over 2m21s)  kubelet            spec.containers{nginx}: Pulling image "nginx:1.99-typo"
+  Warning  Failed     7s (x4 over 2m10s)   kubelet            spec.containers{nginx}: Failed to pull image "nginx:1.99-typo": Error response from daemon: manifest for nginx:1.99-typo not found: manifest unknown: manifest unknown
+  Warning  Failed     7s (x4 over 2m10s)   kubelet            spec.containers{nginx}: Error: ErrImagePull
