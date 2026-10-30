@@ -1,0 +1,2 @@
+NAME        ENDPOINTS        AGE
+hello-svc   10.244.0.20:80   77m
