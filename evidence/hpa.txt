@@ -1,0 +1,2 @@
+NAME        REFERENCE                 TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+hello-hpa   Deployment/hello-deploy   cpu: 1%/10%   3         6         6          19m

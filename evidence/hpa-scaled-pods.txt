@@ -1,0 +1,7 @@
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-deploy-d768964b4-5vt4v   1/1     Running   0          9m56s
+hello-deploy-d768964b4-cgbm6   1/1     Running   0          23m
+hello-deploy-d768964b4-hgthg   1/1     Running   0          9m56s
+hello-deploy-d768964b4-m7ghx   1/1     Running   0          9m56s
+hello-deploy-d768964b4-n6x6s   1/1     Running   0          23m
+hello-deploy-d768964b4-xxzll   1/1     Running   0          23m
