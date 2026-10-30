@@ -18,21 +18,25 @@ kubectl is one minor version ahead of the cluster, which is within the supported
 
 ```
 k8s-project/
--- README.md
--- manifests/
-     -- pod.yaml
-     --deployment.yaml
+ -- README.md
+ -- manifests/
+     --pod.yaml
+     -- deployment.yaml
      -- service.yaml
---- evidence/
-    -- kubectl-get-all.txt
-    -- describe-pod.txt
-    -- pod-logs.txt
-    -- troubleshooting-describe.txt
-    -- troubleshooting-pending.txt
-    -- troubleshooting-pending-pods.txt
-    -- describe-pod-resources.txt
-    -- node-resources.txt
-    -- troubleshooting-log.md
+     -- configmap.yaml
+     -- hpa.yaml
+-- evidence/
+     -- (kubectl output, describe output and troubleshooting files)
+ -- screenshots/
+    -- kubectl-get-all.png
+    -- kubectl-get-pods.png
+    -- service-hello-svc.png
+    -- endpoints-hello-svc.png
+    -- nginx-welcome.png
+    -- configmap-verification.png
+    -- hpa-idle.png
+    -- hpa-scaling.png
+    -- hpa-pods.png
 ```
 
 ## 3. Setup process
@@ -124,7 +128,7 @@ Findings:
 
 ### Task 7: Resource troubleshooting
 
-Two failures were created on purpose and then diagnosed and fixed. See section 5.
+Failures were created or encountered, then diagnosed and fixed. See section 5.
 
 ### Task 8: Resource management
 
@@ -142,6 +146,20 @@ Results:
 - Before: `QoS Class: BestEffort`.
 - After: `Requests: cpu 100m, memory 64Mi`, `Limits: cpu 250m, memory 128Mi`, and `QoS Class: Burstable`.
 - The node's Allocated resources section includes these requests and limits alongside the system Pods in `kube-system`. Three Pods account for 300m CPU and 192Mi memory of requests, and 750m CPU and 384Mi memory of limits.
+
+### Additional improvements
+
+#### Liveness and readiness probes
+
+Both probes were added to the container in `manifests/deployment.yaml`. The readiness probe controls whether a Pod receives Service traffic, and the liveness probe controls whether Kubernetes restarts the container. `kubectl describe pod` shows both (`Liveness: http-get http://:80/ delay=10s period=10s`, `Readiness: http-get http://:80/ delay=5s period=5s`).
+
+#### ConfigMap mounted as a volume
+
+`manifests/configmap.yaml` holds a custom nginx server config, which is mounted into the Pods at `/etc/nginx/conf.d`. It adds a `/healthz` route that the default nginx config does not have. Verification: `kubectl exec deploy/hello-deploy -- cat /etc/nginx/conf.d/default.conf` printed the custom config, and `wget http://hello-svc/healthz` from a temporary Pod returned `ok`.
+
+#### HorizontalPodAutoscaler
+
+`manifests/hpa.yaml` scales `hello-deploy` between 3 and 6 replicas, targeting 10% average CPU utilization (measured against the 100m CPU request). The `metrics-server` addon (`minikube addons enable metrics-server`) is required. With the Pods idle the HPA showed a low CPU percentage with 3 replicas. While a busybox Pod looped `wget` requests against the Service, CPU rose above the target and the HPA added Pods (see the screenshots in section 6).
 
 ## 4. Manifest files
 
@@ -166,7 +184,7 @@ spec:
 
 ### `manifests/deployment.yaml` (final version)
 
-Manages three replicas of the nginx Pod, restores them automatically if one is deleted, performs rolling updates, and sets resource requests and limits.
+Manages three replicas of the nginx Pod, restores them automatically if one is deleted, performs rolling updates, sets resource requests and limits, defines liveness and readiness probes, and mounts the nginx ConfigMap as a volume.
 
 ```yaml
 apiVersion: apps/v1
@@ -195,6 +213,25 @@ spec:
             limits:
               cpu: "250m"
               memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: hello-nginx-conf
 ```
 
 ### `manifests/service.yaml`
@@ -216,6 +253,55 @@ spec:
       nodePort: 30080
 ```
 
+### `manifests/configmap.yaml`
+
+Provides the nginx server config that is mounted into the Pods, including a `/healthz` route.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-nginx-conf
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location / {
+        root /usr/share/nginx/html;
+        index index.html;
+      }
+      location /healthz {
+        access_log off;
+        return 200 "ok\n";
+      }
+    }
+```
+
+### `manifests/hpa.yaml`
+
+Scales the Deployment between 3 and 6 replicas based on CPU utilization.
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hello-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hello-deploy
+  minReplicas: 3
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 10
+```
+
 ## 5. Troubleshooting log
 
 ### Issue 1: `ImagePullBackOff` from a bad image tag
@@ -234,12 +320,35 @@ spec:
 - **Fix:** Reset the request and limit to `64Mi` and `128Mi` and re-applied the manifest. The Pending Pod was removed and all three Pods returned to `Running`.
 - **Lesson:** The scheduler places Pods using resource requests, not actual usage, so an unrealistic request makes a Pod unschedulable.
 
+### Issue 3: Container restarts from a failing liveness probe
+
+- **Symptom:** After changing a probe path in the Deployment, a Pod (`hello-deploy-59898d4c4f-xkwnq`) was restarted repeatedly.
+- **Commands used:** `kubectl get pods`, `kubectl describe pod hello-deploy-59898d4c4f-xkwnq`.
+- **Diagnosis:** The Events showed `Liveness probe failed: HTTP probe failed with statuscode: 404`, followed by `Container nginx failed liveness probe, will be restarted`.
+- **Fix:** Set the probe path back to `/` and re-applied the manifest. The rollout completed and all three Pods returned to `1/1 Running`.
+- **Lesson:** A failing liveness probe makes Kubernetes restart the container, whereas a failing readiness probe only removes the Pod from the Service endpoints.
+
+### Issue 4: HPA showed `<unknown>` because the metrics API was unavailable
+
+- **Symptom:** After applying the HPA, `kubectl get hpa` showed `cpu: <unknown>/20%` and `kubectl top pods` returned `error: Metrics API not available`.
+- **Commands used:** `kubectl get hpa`, `kubectl describe hpa hello-hpa`, `kubectl top pods`, `kubectl get pods -n kube-system`, `kubectl get apiservice v1beta1.metrics.k8s.io`.
+- **Diagnosis:** The HPA Events showed `FailedGetResourceMetric: ... the server is currently unable to handle the request (get pods.metrics.k8s.io)`. The metrics-server addon had only just been enabled and was not ready yet.
+- **Fix:** Waited about three minutes until the metrics-server Pod was `1/1 Running` and the API service showed `AVAILABLE True`. `kubectl top pods` then returned values and the HPA showed a percentage.
+- **Follow-up:** At 21% usage against a 20% target the HPA did not scale, because the HPA ignores deviations within about 10% of the target. Lowering the target to 10% made the same load clearly exceed it.
+- **Lesson:** An HPA depends on the metrics server, and it reports `<unknown>` instead of failing outright when metrics are unavailable.
+
 ### Minor issues encountered
 
 - **`403 Forbidden` for `system:anonymous`:** This appeared when the API server address from `kubectl cluster-info` was opened in a browser. A browser has no client certificate, so the request was anonymous and refused. It confirmed the API server was running and enforcing authentication. `kubectl` works because it uses the credentials in the kubeconfig.
 - **Shell errors from pasted placeholders:** Pasting the literal `<pod-name>` placeholder produced `syntax error near unexpected token 'newline'`, because the shell treats `<` as input redirection. Using real names from `kubectl get pods` fixed it.
 
 ## 6. Verification
+
+Final cluster state, from `kubectl get all` (also saved in `evidence/kubectl-get-all.txt`):
+
+```
+PASTE THE OUTPUT OF: cat evidence/kubectl-get-all.txt
+```
 
 ### Screenshots
 
@@ -259,6 +368,25 @@ spec:
 
 ![hello-svc endpoints](screenshots/endpoints-hello-svc.png)
 
+**External access: nginx welcome page through the NodePort Service**
+
+![nginx welcome page](screenshots/nginx-welcome.png)
+
+**ConfigMap verification (mounted config and `/healthz` returning `ok`)**
+
+![ConfigMap verification](screenshots/configmap-verification.png)
+
+**HPA at idle (3 replicas, low CPU)**
+
+![HPA idle](screenshots/hpa-idle.png)
+
+**HPA under load (CPU above target, replicas increasing)**
+
+![HPA scaling](screenshots/hpa-scaling.png)
+
+**Pods after scale-up**
+
+![Pods after scale-up](screenshots/hpa-pods.png)
 
 ## 7. Key takeaways
 
@@ -267,6 +395,9 @@ spec:
 - Declarative YAML manifests describe the desired state, and `kubectl apply` makes the cluster match it. Reverting a manifest to a previous working version is a simple rollback.
 - `kubectl get`, `describe` and `logs` give a clear workflow for troubleshooting: check the status, read the Events section, then read the logs.
 - Resource requests affect scheduling, and limits cap usage. Setting both changes the Pod's QoS class from `BestEffort` to `Burstable`.
+- Readiness probes gate Service traffic, and liveness probes trigger restarts, so a wrong probe path causes very different symptoms for each.
+- A ConfigMap separates configuration from the container image, so the nginx config can change without rebuilding anything.
+- An HPA needs the metrics server and CPU requests on the Pods. It also ignores small deviations from its target, so a target close to the real usage may never trigger scaling.
 
 ## 8. Cleanup
 
